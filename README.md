@@ -2,7 +2,7 @@
 
 # [CuloBot](https://culobot.notlatif.com)
 
-**CURRENTLY IN BETA**
+**Note:** This project is currently abandoned, but I might come back in the future and pick it back up.
 
 A discord bot that can play music, let's you play chess and do other things.
 **please submit issues, thank you**
