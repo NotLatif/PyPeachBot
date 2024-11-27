@@ -15,16 +15,18 @@ if not os.path.isfile("music/.yt_cookies.txt"):
     mPrint('WARN', 'file `music/.yt_cookies.txt` is missing, explicit songs may get skipped.')
     mPrint('WARN', 'For info look into README.md')
     ydl_opts = {
+        'quiet': True,
+        'ignoreerrors': True,
         'writedescription': False,
         'extract_flat': 'in_playlist',
-        "quiet": True,
     }
 else:
     ydl_opts = {
+        'quiet': True,
+        'ignoreerrors': True,
         'writedescription': False,
         'extract_flat': 'in_playlist',
-        "quiet": True,
-        'cookiefile': 'music/.yt_cookies.txt'
+        'cookiefile': 'music/.yt_cookies.txt',
     }
 
 class Track:
@@ -348,4 +350,49 @@ class Queue:
         for i, track in enumerate(self.getQueue()):
             string += f'{i}: {str(track)}\n'
         return string
-    
+
+
+class ytThumbDTO:
+    url: str
+    height: int
+    width: int
+    id: str | None
+    resolution: str | None
+
+class ytTrackDTO:
+    _type: str
+    ie_key: str
+    id: str
+    url: str
+    title: str
+    # description: str
+    duration: int
+    channel_id: str
+    channel: str
+    channel_url: str
+    uploader: str
+    uploader_id: str | None
+    uploader_url: str | None
+    thumbnails: list[ytThumbDTO]
+    # ...
+    view_count: int
+
+class ytPlistDTO:
+    id: str
+    title: str
+    availability: str
+    # description: str
+    thumbnails: list[ytThumbDTO]
+    playlist_count: int
+    channel: str
+    channel_id: str
+    channel_url: str
+    uploader: str
+    uploader_id: str
+    uploader_url: str
+    entries: list[ytTrackDTO]
+    webpage_url: str
+    original_url: str
+    #keys: ['id', 'title', 'availability', 'channel_follower_count', 'description', 'tags', 'thumbnails', 'modified_date', 'view_count', 
+        # 'playlist_count', 'channel', 'channel_id', 'uploader_id', 'uploader', 'channel_url', 'uploader_url', '_type', 'entries', 
+        # 'extractor_key', 'extractor', 'webpage_url', 'original_url', 'webpage_url_basename', 'webpage_url_domain', 'epoch']

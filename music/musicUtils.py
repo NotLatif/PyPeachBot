@@ -1,18 +1,18 @@
 import json
 import traceback
 from urllib.parse import urlparse
-from typing import Union
+from typing import Literal, Union
 import youtubeParser
 import spotifyParser
 import musicObjects
 from constants import spotify_netloc, urlsync_folder
 from mPrint import mPrint as mp, tagType
 def mPrint(tag: tagType, text):
-    mp(tag, 'urlparser', text)
+    mp(tag, 'musicUtils', text)
 
 def cleanURL(url: str):
     parsed_url = urlparse(url)
-    if parsed_url.netloc == spotify_netloc:
+    if 'spotify' in parsed_url.netloc: #remove query params from spotify links
         return f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
     return url
 
@@ -20,7 +20,7 @@ async def asyncFetchTracks(target: str) -> Union[list[musicObjects.Track], None]
     """return a list of track objects found from an url or query, if the song is only 1, returns a list of one element"""
     mPrint('TEST', f'{target=}')
     parsed_url = urlparse(target)
-    if 'spotify.com' in parsed_url.netloc: # target is a spotify URL
+    if 'spotify' in parsed_url.netloc: # target is a spotify URL
         parsed_url = cleanURL(target)
         try:
             tracks = spotifyParser.fetchTracks(target)
@@ -78,10 +78,10 @@ def fetchTracks(target: str) -> Union[list[musicObjects.Track], None]:
         try:
             tracks = youtubeParser.fetchTracks(target)
             if tracks == None:
-                mPrint('ERROR', f'Youtube parser error for: {target}')
+                mPrint('ERROR', f'Youtube did not find any track for this url: {target}')
                 return None
         except Exception:
-            mPrint('ERROR', f"Youtube parser error:\nurl = {target}\n{traceback.format_exc()}")
+            mPrint('ERROR', f"There was an error extracting url info:\nurl = {target}\n{traceback.format_exc()}")
             return None
 
     return tracks
@@ -106,3 +106,4 @@ def getUrlSync(guildID: int) -> list[dict]:
 
 def writeUrlSync(guildID: int, data:list[dict]):
     pass
+

@@ -119,7 +119,6 @@ def getTracksFromAlbum(URL) -> list[Track]:
 
     for i in range( ceil(trackNumber / trackLimit) ):
         albumDataRes = sp.album_tracks(URL, offset=i*trackLimit)["items"]
-
         for trackData in albumDataRes:
             trackSpotifyURL = ""
             if ("spotify" in trackData["external_urls"]):

@@ -714,18 +714,17 @@ async def chess(interaction : discord.Interaction, challenge : Union[discord.Rol
             board = ('FEN', gameFEN)
 
         mPrint('TEST', f'Design {gameDesign} ')
-        if gameDesign != 'default': #if user asked for a design, check if it exists
-            #give priority to guild designs
-            if gameDesign in settings[guildID]['chessGame']['designs']:
-                mPrint('TEST', f'Found Local design {gameDesign} ')
-                colors = settings[guildID]['chessGame']['designs'][gameDesign]
-                gameDesign = chessBridge.chessMain.gameRenderer.renderBoard(colors, interaction.id)
-            elif chessBridge.chessMain.gameRenderer.doesDesignExist(gameDesign):
-                mPrint('TEST', f'Found Global design {gameDesign}')
-                gameDesign = chessBridge.chessMain.gameRenderer.getGlobalDesign(gameDesign) 
-            else:
-                mPrint('TEST', f'Design not found')
-                gameDesign = 'default'
+        # check if design exists
+        if gameDesign in settings[guildID]['chessGame']['designs']:
+            mPrint('TEST', f'Found Local design {gameDesign} ')
+            colors = settings[guildID]['chessGame']['designs'][gameDesign]
+            gameDesign = chessBridge.chessMain.gameRenderer.renderBoard(colors, interaction.id)
+        elif chessBridge.chessMain.gameRenderer.doesDesignExist(gameDesign):
+            mPrint('TEST', f'Found Global design {gameDesign}')
+            gameDesign = chessBridge.chessMain.gameRenderer.getGlobalDesign(gameDesign) 
+        else:
+            mPrint('TEST', f'Design not found')
+            gameDesign = 'default'
         
     # 3. All seems good, now let's send the embed to find some players
         #3A. Challenge one user
@@ -1322,10 +1321,13 @@ async def playlists(interaction : discord.Interaction, sub_command: app_commands
                 guild_urlsync = musicBridge.musicUtils.getUrlSync(guildID)
 
                 tracks = musicBridge.parseUserInput(",".join(user_queries), guild_playlists, guild_urlsync)
-                if tracks == 404: 
-                    pass
-                elif tracks == None: pass
-
+                if tracks == None:
+                    await modal_interaction.followup.send(lang.music.input_error)
+                    return -1
+                elif tracks == 404:
+                    await modal_interaction.followup.send(lang.music.play_error_404)
+                    return -1
+                
                 trackList = ''
                 for i, t in enumerate(tracks):
                     trackList += f"\n**{i}**. {t}"
@@ -1374,6 +1376,12 @@ async def playlists(interaction : discord.Interaction, sub_command: app_commands
                     guild_urlsync = musicBridge.musicUtils.getUrlSync(guildID)
 
                     tracks = musicBridge.parseUserInput(",".join(user_queries), guild_playlists, guild_urlsync)
+                    if tracks == None:
+                        await modal_interaction.followup.send(lang.music.input_error)
+                        return -1
+                    elif tracks == 404:
+                        await modal_interaction.followup.send(lang.music.play_error_404)
+                        return -1
 
                     trackList = ''
                     for i, t in enumerate(tracks):
@@ -1388,7 +1396,7 @@ async def playlists(interaction : discord.Interaction, sub_command: app_commands
                         description=f"```{trackList}```",
                         color = col.orange
                     )
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    await modal_interaction.response.send_message(embed=embed, ephemeral=True)
                     
                     return
 

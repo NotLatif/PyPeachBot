@@ -32,14 +32,15 @@ def parseUserInput(userQuery:str, playlists : dict[str, list[str]], urlsync: lis
     userQuery = userQuery.strip()
     parsedQueries = []
 
-    # if entire query is exact match with playlist, use that
+
+    # - if entire query string is exact match with playlist, use that
     if userQuery in [playlist_name for playlist_name in playlists]:
         mPrint('DEBUG', "found saved playlist")
         for track in playlists[userQuery]:
             parsedQueries.append(track)
         return parsedQueries
     
-    # if entire query is present in urlsync, use that
+    # - if entire query is present in urlsync, use that
     for data in urlsync:
         if not('youtube_url' in data): 
             continue
@@ -52,8 +53,8 @@ def parseUserInput(userQuery:str, playlists : dict[str, list[str]], urlsync: lis
             mPrint('DEBUG', "query match urlsync")
             return parsedQueries
 
-
-    if ',' in userQuery: #multiple queries
+    # - else, search track info
+    if ',' in userQuery:
         mPrint('DEBUG', "splitting request into multiple queries")
         individualQueries = [q.strip() for q in userQuery.split(',')] # " A, A A,AA" -> ["A", "A A", "AA"]
     else: #one query
@@ -77,7 +78,7 @@ def parseUserInput(userQuery:str, playlists : dict[str, list[str]], urlsync: lis
         if continue_flag: continue
 
         #query is URL
-        if "spotify.com" in query or "youtube.com" in query or "youtu.be" in query:
+        if "spotify." in query or "youtube.com" in query or "youtu.be" in query:
             mPrint('DEBUG', f'query is URL')
             query = musicUtils.cleanURL(query)
             parsedQueries.append(query)
@@ -92,7 +93,11 @@ def parseUserInput(userQuery:str, playlists : dict[str, list[str]], urlsync: lis
         else:
             mPrint('DEBUG', f'query is yt search: ({query})')
             trackURL = musicUtils.youtubeParser.searchYTurl(query)
-            if trackURL == None: continue
+            if trackURL == None:
+                continue
+            if trackURL == 404:
+                # error print already in searchYTurl()
+                return 404
             mPrint('DEBUG', f'found url: {trackURL}')
             parsedQueries.append(trackURL)
 
@@ -419,12 +424,20 @@ async def play(
                                 mPrint('TEST', f"{alreadySuggested=}")
                             
                             # play suggested track and skip the (presumably) wrong track
-                            if parseUserInput(suggested_url, guildPlaylists, urlsync) != None:
-                                await actions(Commands.add_song, suggested_url, 0)
+                            if type(parseUserInput(suggested_url, guildPlaylists, urlsync)) == list:
+                                resp = await actions(Commands.add_song, suggested_url, 0)
+                                if resp == None:
+                                    await submit_interaction.followup.send("Could not find your suggested track.", ephemeral=True)
+                                    return
 
                                 #delete (and skip) track if it didn't already finish
                                 if reportedTrack == Player.currentTrack: 
                                     await actions(Commands.remove, 0)
+                            else:
+                                # failed to find suggested track
+                                mPrint('DEBUG', "Unable to find suggested track.")
+                                await submit_interaction.followup.send("Could not find your suggested tracks.", ephemeral=True)
+                                return
 
                         mPrint('INFO', f"User reported discrepancy for song {Player.currentTrack.getQuery()}")
                         await submit_interaction.followup.send("Thanks for your suggestion!", ephemeral=True)
