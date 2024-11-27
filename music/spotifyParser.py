@@ -32,20 +32,20 @@ def spotifyUrlParser(URL:str) -> tuple[str, str]:
     type = URL.split("/")[-2]
     return (id, type)
 
-def fetchTracks(URL:str, urlsync:list[dict]) -> list[Track]:
+def fetchTracks(URL:str) -> list[Track]:
     if not authenticated:
         return -1
     id, type = spotifyUrlParser(URL)
 
-    if type == "playlist": tracks = getTracksFromPlaylist(id, urlsync)
-    elif type == "album": tracks = getTracksFromAlbum(id, urlsync)
-    elif type == "track": tracks = getTracksFromTrack(id, urlsync)
+    if type == "playlist": tracks = getTracksFromPlaylist(id)
+    elif type == "album": tracks = getTracksFromAlbum(id)
+    elif type == "track": tracks = getTracksFromTrack(id)
     else: return -2
 
     return tracks
 
 #"spsync": [], # {spotify_uri: {query: str, spotify_url: str, youtube_url: str, soundcloud_url?: str}}
-def getTracksFromPlaylist(URL, urlsync: list[dict]) -> list[Track]:
+def getTracksFromPlaylist(URL) -> list[Track]:
     # mPrint('FUNC', f"spotifyParser.getTracksFromPlaylist({URL=}, urlsync)")
     #acquire playlist size and spotify GET limit
     trackNumber = sp.playlist_tracks(URL)["total"]
@@ -77,21 +77,8 @@ def getTracksFromPlaylist(URL, urlsync: list[dict]) -> list[Track]:
                     mPrint('ERROR', f'artists parsing error, artists object:')
                     print(a)
             if len(artists) == 0: artists = [{"name": "N/A", "url": "#"}]
-            
-            fisrtArtist = artists[0]['name']
-            urlsyncQueries = [(i, x['query']) for i, x in enumerate(urlsync)] # (index, "query")
-            for q in urlsyncQueries:
-                if q[1] == f"{trackData['name']} {fisrtArtist}":
-                    try:
-                        yt_url = urlsync[q[0]]['spotify_url']
-                        mPrint('DEBUG', f"Found overwritten track ({trackData['name']} {fisrtArtist})")
-                    except KeyError:
-                        yt_url = None
-                    except Exception:
-                        mPrint('WARN', traceback.format_exc())
-            else:
-                yt_url = None
 
+            yt_url = None
             try:
                 if trackData['is_local'] == False:
                     tracks.append(Track(
@@ -120,7 +107,7 @@ def getTracksFromPlaylist(URL, urlsync: list[dict]) -> list[Track]:
 
     return tracks
 
-def getTracksFromAlbum(URL, urlsync) -> list[Track]:
+def getTracksFromAlbum(URL) -> list[Track]:
     # mPrint('FUNC', f"spotifyParser.getTracksFromAlbum({URL=}, urlsync)")
     #acquire playlist size and spotify GET limit
     trackNumber = sp.album_tracks(URL)["total"]
@@ -132,7 +119,6 @@ def getTracksFromAlbum(URL, urlsync) -> list[Track]:
 
     for i in range( ceil(trackNumber / trackLimit) ):
         albumDataRes = sp.album_tracks(URL, offset=i*trackLimit)["items"]
-
         for trackData in albumDataRes:
             trackSpotifyURL = ""
             if ("spotify" in trackData["external_urls"]):
@@ -152,20 +138,7 @@ def getTracksFromAlbum(URL, urlsync) -> list[Track]:
                     print(a)
             if len(artists) == 0: artists = [{"name": "N/A", "url": "#"}]
             
-            fisrtArtist = artists[0]['name']
-            urlsyncQueries = [(i, x['query']) for i, x in enumerate(urlsync)] # (index, "query")
-            for q in urlsyncQueries:
-                if q[1] == f"{trackData['name']} {fisrtArtist}":
-                    try:
-                        yt_url = urlsync[q[0]]['spotify_url']
-                        mPrint('DEBUG', f"Found overwritten track ({trackData['name']} {fisrtArtist})")
-                    except KeyError:
-                        yt_url = None
-                    except Exception:
-                        mPrint('WARN', traceback.format_exc())
-            else:
-                yt_url = None
-            
+            yt_url = None
             tracks.append(Track(
                 SOURCE,
                 trackSpotifyURL,
@@ -180,7 +153,7 @@ def getTracksFromAlbum(URL, urlsync) -> list[Track]:
 
     return tracks
 
-def getTracksFromTrack(URL, urlsync) -> list[Track]:
+def getTracksFromTrack(URL) -> list[Track]:
     # mPrint('FUNC', f"spotifyParser.getTracksFromTrack({URL=}, urlsync)")
     trackData: dict = sp.track(URL)
 
@@ -203,20 +176,7 @@ def getTracksFromTrack(URL, urlsync) -> list[Track]:
             print(a)
     if len(artists) == 0: artists = [{"name": "N/A", "url": "#"}]
 
-    fisrtArtist = artists[0]['name']
-    urlsyncQueries = [(i, x['query']) for i, x in enumerate(urlsync)] # (index, "query")
-    for q in urlsyncQueries:
-        if q[1] == f"{trackData['name']} {fisrtArtist}":
-            try:
-                yt_url = urlsync[q[0]]['spotify_url']
-                mPrint('DEBUG', f"Found overwritten track ({trackData['name']} {fisrtArtist})")
-            except KeyError:
-                yt_url = None
-            except Exception:
-                mPrint('WARN', traceback.format_exc())
-    else:
-        yt_url = None
-
+    yt_url = None
     #return a single item list with the data
     return [Track(
         SOURCE,

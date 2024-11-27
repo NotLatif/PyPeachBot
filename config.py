@@ -1,3 +1,4 @@
+#from utils.constants import ALL, DEBUG, INFO, WARN, ERROR, FATAL
 from discord import Status
 # This file contains global configs (which affect every guild) and configs about the script.
 # Modifications are effective only after a bot restart
@@ -5,21 +6,18 @@ from discord import Status
 bot_name = "CuloBot"
 bot_description = "/play"
 bot_status = Status.online
+debug_mode = True
 
 language = "EN" # [IT, EN]
 
-# Terminal
-logLevel = 2 #determines what tags the script prints in the terminal
-printLevel = 0 #determines what tags the script prints in the "bot.log" file
-useColors = True #whether the terminal should display colored text
-timeInTerminal = True
-
-#NOTE, if something won't print it won't log either even if you specified otherwise (printLevel <= logLevel)
-#levels: (0 will show every tag; 3 will only show ERROR)
-# 0 - DEBUG, VARS, TEST, FUNC, CMDS     < [0, 1, 2, 3]
-# 1 - INFO, MUSIC, USER, GAME           < [1, 2, 3]
-# 2 - WARN, GAMEErr                     < [2, 3]
-# 3 - ERROR, FATAL, SONGERROR           < [3]
+# logging
+min_log_level = 2       # | 0: all / 1: info / 2: warn / 3: error |
+min_print_level = 0     # |                  -                    |
+do_print_color = True
+do_print_date = True
+do_print_time = True
+do_print_guild_id = True
+remote_logging = False #WIP (does not work yet)
 
 # BOT
 

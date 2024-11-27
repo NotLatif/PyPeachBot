@@ -20,13 +20,12 @@ sys.path.insert(0, 'chessGame/')
 #utils
 import config
 import getevn
-import constants
+from constants import SETTINGS_TEMPLATE, settings_folder
 from config import Colors as col
 from mPrint import mPrint as mp
 #music and chessGame
 import chessBridge
 import musicBridge
-import musicUrlParser
 
 if config.language == "IT":
     from lang import it as lang
@@ -52,85 +51,80 @@ intents = discord.Intents.all()
 intents.members = True
 intents.messages = True
 
-settingsFile = "botFiles/guildsData.json"
+
+# ===| INDIVIDUAL GUILD SETTINGS HANDLER (move to it's own module?) |=== #
 
 global settings
 settings = {}
-with open(settingsFile, 'a'): pass #make guild setting file if it does not exist
 
-SETTINGS_TEMPLATE = constants.SETTINGS_TEMPLATE
-
-#Useful funtions
-def dumpSettings(): #only use this function to save data to guildData.json (This should avoid conflicts with coroutines idk)
+def dumpSettings(guild_id:int = 0): # settings disctionary -> json files
     """Saves the settings to file"""
-    dump = {str(k): settings[k] for k in settings}
-    with open(settingsFile, 'w') as f:
+    # mPrint('FUNC', f"dumping settings for {settings_folder}{guild_id}.json")
+    dump = settings[guild_id]
+    with open(settings_folder + f"{guild_id}.json", 'w') as f:
         json.dump(dump, f, indent=2)
 
-def loadSettings():
-    template = {}
+def loadSettings(guild_id:int): # json files -> settings dictionary
     global settings
+    mPrint('FUNC', "Loading guild settings")
     try:
-        with open(settingsFile, 'r') as f:
-            settings = json.load(f)
-    except json.JSONDecodeError: #file is empty FIXME testing, what if file is not empty and it's a decode error?
-        with open(settingsFile, 'w') as fp:
-            json.dump(template, fp , indent=2)
-        return 0
+        with open(settings_folder + f"{guild_id}.json", 'r') as f:
+            settings[guild_id] = json.load(f)
+    except json.JSONDecodeError:
+        mPrint('ERROR', traceback.format_exc())
+    except Exception:
+        mPrint('ERROR', f"Could not load settings for [{guild_id}]{traceback.format_exc()}")
 
-    settings = {int(k): settings[k] for k in settings}
+def createSettings(guild_id:int): # new json files
+    guild_id = int(guild_id)
+    mPrint('FUNC', "Generating new settings for guild")
 
-def createSettings(id : int): #creates settings for new guilds
-    id = int(id)
-    with open(settingsFile, 'r') as f:
-        temp = json.load(f)
-    temp[id] = SETTINGS_TEMPLATE["id"]
+    if (not os.path.isdir(settings_folder)): 
+        os.mkdir(settings_folder)
 
-    with open(settingsFile, 'w') as f:
+    temp = SETTINGS_TEMPLATE["id"]
+    with open(settings_folder + f"{guild_id}.json", 'w') as f:
         json.dump(temp, f, indent=2)
 
-    loadSettings()
-  
-def checkSettingsIntegrity(id : int):
-    id = int(id)
-    mPrint('DEBUG', f'Checking guildData integrity')
+def checkSettingsIntegrity(guild_id:int):
+    guild_id = int(guild_id)
+    mPrint('FUNC', f'Checking settings integrity for guild')
 
     try:
-        settingsToCheck = copy.deepcopy(settings[id])
+        settingsToCheck = copy.deepcopy(settings[guild_id])
     except KeyError:
         mPrint('FATAL', f'Settings for guild were not initialized correctly\n{traceback.format_exc()}')
         sys.exit(-1)
 
     #check if there is more data than there should
     for key in settingsToCheck:
-        if(key not in SETTINGS_TEMPLATE["id"]): #check if there is a key that should not be there (avoid useless data)
-            del settings[id][key]
+        if(key not in SETTINGS_TEMPLATE["id"]): #check if there is a key that should not be there
+            del settings[guild_id][key]
             mPrint('DEBUG', f'Deleting: {key}')
 
         if(type(settingsToCheck[key]) == dict):
             #if(key in ["saved_playlists", "urlsync"]): continue #whitelist
             for subkey in settingsToCheck[key]:
-                if(subkey not in SETTINGS_TEMPLATE["id"][key]): #check if there is a subkey that should not be there (avoid useless data)
-                    del settings[id][key][subkey]
+                if(subkey not in SETTINGS_TEMPLATE["id"][key]): #check if there is a subkey that should not be there
+                    del settings[guild_id][key][subkey]
                     mPrint('DEBUG', f'Deleting: {subkey}')
 
     #check if data is missing
     for key in SETTINGS_TEMPLATE["id"]:
-        if(key not in settings[id]): #check if there is a key that should not be there (avoid useless data)
-            settings[id][key] = SETTINGS_TEMPLATE["id"][key]
+        if(key not in settings[guild_id]): #check if a key is missing
+            settings[guild_id][key] = SETTINGS_TEMPLATE["id"][key]
             mPrint('DEBUG', f'Creating key: {key}')
 
         #it it's a dict also check it's keys
         if(type(SETTINGS_TEMPLATE["id"][key]) == dict):
             for subkey in SETTINGS_TEMPLATE["id"][key]:
-                if(subkey not in settings[id][key]): #check if there is a key that should not be there (avoid useless data)
-                    settings[id][key][subkey] = SETTINGS_TEMPLATE["id"][key][subkey]
+                if(subkey not in settings[guild_id][key]): #check if a subkey is missing
+                    settings[guild_id][key][subkey] = SETTINGS_TEMPLATE["id"][key][subkey]
                     mPrint('DEBUG', f'Creating subkey: {subkey}')
 
-    dumpSettings()
+    dumpSettings(guild_id)
 
-    mPrint('INFO', f'GuildSettings for {id} seem good.')
-
+# ===| helper functions |=== #
 def getWord(all=False) -> Union[str, list]:
     """
     :return: A random line from the words.txt file.
@@ -186,17 +180,18 @@ class CuloBot(discord.Client):
             mPrint('ERROR', {x})
 
     async def on_guild_join(self, guild:discord.Guild):
-        mPrint("INFO", f"Joined guild {guild.name} (id: {guild.id})")
+        guild_id = int(guild.id)
+        mPrint("INFO", f"Joined guild {guild.name} (id: {guild_id})")
 
         members = '\n - '.join([member.name for member in guild.members])
         mPrint('DEBUG', f'Guild Members:\n - {members}')
-        if (int(guild.id) not in settings):
-            mPrint('DEBUG', f'^ Generating settings for guild {int(guild.id)}')
-            createSettings(int(guild.id))
+        if (guild_id not in settings):
+            createSettings(guild_id)
         else:
-            mPrint('DEBUG', f'settings for {int(guild.id)} are present in {settings}')
+            mPrint('DEBUG', f'settings for {guild_id} are present in {settings}')
 
-        checkSettingsIntegrity(int(guild.id))
+        loadSettings(guild_id)
+        checkSettingsIntegrity(guild_id)
 
         # voice_client : discord.VoiceClient = get(bot.voice_clients, guild=guild)
         # if voice_client != None and voice_client.is_connected():
@@ -208,6 +203,8 @@ class CuloBot(discord.Client):
     async def on_ready(self):
         if self.isReady: return # ensure that on_ready only runs one time
         self.isReady = True
+        mPrint("DEBUG", "Called on_ready")
+
         try:
             self.dev = await bot.fetch_user(OWNER_ID)
         except discord.errors.NotFound:
@@ -215,26 +212,23 @@ class CuloBot(discord.Client):
         except NameError:
             pass
         await bot.change_presence(status=config.bot_status, activity=discord.Activity(type=discord.ActivityType.listening, name=config.bot_description))
+
+        mPrint("INFO", f'Connected to {len(bot.guilds)} guild(s)')
+        for guild in bot.guilds:
+            guild_id = int(guild.id)
+
+            mPrint('DEBUG', f'Initializing guild {guild_id} -')
+            if (not os.path.isfile(settings_folder+f"{guild_id}.json")):
+                createSettings(guild_id)
+
+            loadSettings(guild_id)
+            # mPrint('DEBUG', json.dumps({guild_id: settings[guild_id]}, indent=2))
+            checkSettingsIntegrity(guild_id)
+
+        mPrint('DEBUG', "command tree sync...")
         await tree.sync()
 
-        mPrint("DEBUG", "Called on_ready")
-        if len(sys.argv) == 5 and sys.argv[1] == "RESTART":
-            mPrint("INFO", "BOT WAS RESTARTED")
-            guild = await bot.fetch_guild(sys.argv[2])
-            channel = await guild.fetch_channel(sys.argv[3])
-            message = await channel.fetch_message(sys.argv[4])
-            await message.reply("Bot restarted")
-            
-        mPrint("INFO", f'Connected to {len(bot.guilds)} guild(s):')
-        for guild in bot.guilds:
-            mPrint('DEBUG', f'Checking {guild.id}')
-            if (int(guild.id) not in settings):
-                mPrint('DEBUG', f'^ Generating settings')
-                createSettings(int(guild.id))
-            else:
-                mPrint('DEBUG', f'settings for are present.')
-
-            checkSettingsIntegrity(int(guild.id))
+        mPrint('INFO', "bot is ready.")
 
     async def on_member_join(self, member : discord.Member):
         if not config.discord_events: return
@@ -319,7 +313,7 @@ tree = app_commands.CommandTree(bot)
 @tree.command(name="join-msg", description=lang.slash.join_msg)
 async def joinmsg(interaction : discord.Interaction, message : str = None, enabled : bool = None):
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /join-msg {message}')
@@ -327,11 +321,11 @@ async def joinmsg(interaction : discord.Interaction, message : str = None, enabl
 
     if enabled != None:
         settings[guildID]['responseSettings']['send_join_msg'] = enabled
-        dumpSettings()
+        dumpSettings(guildID)
 
     if message != None: #edit join-message or show help
         settings[guildID]['responseSettings']['join_message'] = message
-        dumpSettings()
+        dumpSettings(guildID)
 
     embed = discord.Embed(
         title=lang.commands.join_msg_embed_title,
@@ -343,7 +337,7 @@ async def joinmsg(interaction : discord.Interaction, message : str = None, enabl
 @tree.command(name="leave-msg", description=lang.slash.leave_msg)
 async def leavemsg(interaction : discord.Interaction, message : str = None, enabled : bool = None):
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /leave-msg {message}')
@@ -351,11 +345,11 @@ async def leavemsg(interaction : discord.Interaction, message : str = None, enab
 
     if enabled != None:
         settings[guildID]['responseSettings']['send_leave_msg'] = enabled
-        dumpSettings()
+        dumpSettings(guildID)
 
     if message != None: #edit join-message or show help
         settings[guildID]['responseSettings']['leave_message'] = message
-        dumpSettings()
+        dumpSettings(guildID)
     
     embed = discord.Embed(
         title=lang.commands.leave_msg_embed_title,
@@ -367,7 +361,7 @@ async def leavemsg(interaction : discord.Interaction, message : str = None, enab
 @tree.command(name="respond-perc", description=lang.slash.respond_perc)
 async def responsePerc(interaction : discord.Interaction, value : int = -1):
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
 
     mPrint('CMDS', f'called /respond-perc {value}')
@@ -390,12 +384,12 @@ async def responsePerc(interaction : discord.Interaction, value : int = -1):
 
     mPrint('INFO', f'{interaction.user.name} set response to {value}%')
     settings[guildID]['responseSettings']['response_perc'] = value
-    dumpSettings()
+    dumpSettings(guildID)
 
 @tree.command(name="respond-to-bots", description=lang.slash.respond_to_bots)
 async def botRespToggle(interaction : discord.Interaction, value : bool):
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /respond-to-bots {value}')
@@ -408,13 +402,13 @@ async def botRespToggle(interaction : discord.Interaction, value : bool):
     await interaction.response.send_message(response)
 
     settings[guildID]['responseSettings']['will_respond_to_bots'] = value
-    dumpSettings()
+    dumpSettings(guildID)
     return
 
 @tree.command(name="respond-to-bots-perc", description=lang.slash.respond_to_bots_perc)
 async def botRespPerc(interaction : discord.Interaction, value : int = -1):
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /respond-to-bots-perc {value}')
@@ -436,13 +430,13 @@ async def botRespPerc(interaction : discord.Interaction, value : int = -1):
 
     await interaction.response.send_message(lang.commands.resp_to_bots_edit(value))
     settings[guildID]['responseSettings']['response_to_bots_perc'] = value
-    dumpSettings()
+    dumpSettings(guildID)
     return
 
 @tree.command(name="dictionary", description=lang.slash.dictionary)
 async def dictionary(interaction : discord.Interaction):
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /dictionary')
@@ -489,7 +483,7 @@ async def dictionary_add(interaction : discord.Interaction, new_word : str):
     :param new_word: La parola che si vuole aggiungere
     """
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /dictionary add {new_word}')
@@ -497,7 +491,7 @@ async def dictionary_add(interaction : discord.Interaction, new_word : str):
 
     settings[guildID]['responseSettings']['custom_words'].append(new_word)
     await interaction.response.send_message(lang.commands.words_learned, ephemeral=True)
-    dumpSettings()
+    dumpSettings(guildID)
     return
 
 @tree.command(name="dictionary-edit", description=lang.slash.dictionary_edit)
@@ -509,7 +503,7 @@ async def dictionary_edit(interaction : discord.Interaction, id : int, new_word 
     :param new_word: La parola che vuoi rimpiazzare
     """
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /dictionary edit {id}, {new_word}')
@@ -518,7 +512,7 @@ async def dictionary_edit(interaction : discord.Interaction, id : int, new_word 
     editWord = id
     if len(settings[guildID]['responseSettings']['custom_words']) > editWord:
         settings[guildID]['responseSettings']['custom_words'][editWord] = new_word
-        dumpSettings()
+        dumpSettings(guildID)
         await interaction.response.send_message(lang.done, ephemeral=True)
     else:
         await interaction.response.send_message(lang.commands.words_id_not_found, ephemeral=True)
@@ -532,7 +526,7 @@ async def dictionary_del(interaction : discord.Interaction, id : int):
     :param id: L'id della parola che vuoi eliminare
     """
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /dictionary del {id}')
@@ -541,7 +535,7 @@ async def dictionary_del(interaction : discord.Interaction, id : int):
     delWord = id
     if len(settings[guildID]['responseSettings']['custom_words']) > delWord:
         del settings[guildID]['responseSettings']['custom_words'][delWord]
-        dumpSettings()
+        dumpSettings(guildID)
         await interaction.response.send_message(lang.done, ephemeral=True)
     else:
         await interaction.response.send_message(lang.commands.words_id_not_found, ephemeral=True)
@@ -550,7 +544,7 @@ async def dictionary_del(interaction : discord.Interaction, id : int):
 @tree.command(name="dictionary-useglobal", description=lang.slash.dictionary_use_global)
 async def dictionary_default(interaction : discord.Interaction, value : bool ):
     if not config.reply:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /dictionary useglobal {value}')
@@ -558,7 +552,7 @@ async def dictionary_default(interaction : discord.Interaction, value : bool ):
 
     settings[guildID]["responseSettings"]["use_global_words"] = value
     await interaction.response.send_message(f'useDefault: {value}', ephemeral=True)
-    dumpSettings()
+    dumpSettings(guildID)
     return
 
 # ======== CHESS ========= #
@@ -570,7 +564,7 @@ async def chess(interaction : discord.Interaction, challenge : Union[discord.Rol
     :param design: Il nome del design della scacchiera
     """
     if not config.chess:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /chess: ch: {challenge}')
@@ -720,18 +714,17 @@ async def chess(interaction : discord.Interaction, challenge : Union[discord.Rol
             board = ('FEN', gameFEN)
 
         mPrint('TEST', f'Design {gameDesign} ')
-        if gameDesign != 'default': #if user asked for a design, check if it exists
-            #give priority to guild designs
-            if gameDesign in settings[guildID]['chessGame']['designs']:
-                mPrint('TEST', f'Found Local design {gameDesign} ')
-                colors = settings[guildID]['chessGame']['designs'][gameDesign]
-                gameDesign = chessBridge.chessMain.gameRenderer.renderBoard(colors, interaction.id)
-            elif chessBridge.chessMain.gameRenderer.doesDesignExist(gameDesign):
-                mPrint('TEST', f'Found Global design {gameDesign}')
-                gameDesign = chessBridge.chessMain.gameRenderer.getGlobalDesign(gameDesign) 
-            else:
-                mPrint('TEST', f'Design not found')
-                gameDesign = 'default'
+        # check if design exists
+        if gameDesign in settings[guildID]['chessGame']['designs']:
+            mPrint('TEST', f'Found Local design {gameDesign} ')
+            colors = settings[guildID]['chessGame']['designs'][gameDesign]
+            gameDesign = chessBridge.chessMain.gameRenderer.renderBoard(colors, interaction.id)
+        elif chessBridge.chessMain.gameRenderer.doesDesignExist(gameDesign):
+            mPrint('TEST', f'Found Global design {gameDesign}')
+            gameDesign = chessBridge.chessMain.gameRenderer.getGlobalDesign(gameDesign) 
+        else:
+            mPrint('TEST', f'Design not found')
+            gameDesign = 'default'
         
     # 3. All seems good, now let's send the embed to find some players
         #3A. Challenge one user
@@ -931,7 +924,7 @@ async def chess(interaction : discord.Interaction, challenge : Union[discord.Rol
 @app_commands.describe(sub_command=lang.choices.description)
 async def chess_layout(interaction : discord.Interaction, sub_command: app_commands.Choice[str]): #, name:str=None, fen:str = None
     if not config.chess:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /chess-layout: {sub_command.name}')
@@ -1023,7 +1016,7 @@ async def chess_layout(interaction : discord.Interaction, sub_command: app_comma
                 if str(self.name) not in settings[guildID]['chessGame']['boards']:
                     #iii. append the board and dump the json data
                     settings[guildID]['chessGame']['boards'][str(self.name)] = str(self.fen)
-                    dumpSettings()
+                    dumpSettings(guildID)
                     await interaction.response.send_message(lang.chess.layout_add_done(str(self.name), str(self.fen)))
                 else:
                     await interaction.response.send_message(lang.chess.layout_add_exists)
@@ -1048,7 +1041,7 @@ async def chess_layout(interaction : discord.Interaction, sub_command: app_comma
 
                 async def on_submit(self, interaction: discord.Interaction): #this triggers when user submits the modal with the new data
                     settings[guildID]['chessGame']['boards'][layoutname] = str(self.newfen)
-                    dumpSettings()
+                    dumpSettings(guildID)
                     await interaction.response.send_message(lang.chess.layout_edit_ok(layoutname, str(self.newfen)))
             await interaction.response.send_modal(EditLayoutData())
 
@@ -1073,7 +1066,7 @@ async def chess_layout(interaction : discord.Interaction, sub_command: app_comma
             layoutname = choices.values[0]
             if layoutname in settings[guildID]['chessGame']['boards']:
                 fen = settings[guildID]['chessGame']['boards'].pop(layoutname)
-                dumpSettings()
+                dumpSettings(guildID)
                 await interaction.response.send_message(lang.chess.layout_delete_ok(layoutname, fen))
 
         choices.callback = delete_board
@@ -1094,7 +1087,7 @@ async def chess_layout(interaction : discord.Interaction, sub_command: app_comma
 @app_commands.describe(sub_command=lang.choices.description)
 async def chess_design(interaction : discord.Interaction, sub_command: app_commands.Choice[str]): #, name:str=None, fen:str = None
     if not config.chess:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /chess-designs: {sub_command.name}')
@@ -1206,7 +1199,7 @@ async def chess_design(interaction : discord.Interaction, sub_command: app_comma
                         return -2
                     settings[guildID]['chessGame']['designs'][name] = colors
                     await interaction.response.send_message(lang.chess.design_add_done(name, colors))
-                    dumpSettings()
+                    dumpSettings(guildID)
                     
                 else:
                     await interaction.response.send_message(lang.chess.design_add_exists)
@@ -1263,7 +1256,7 @@ async def chess_design(interaction : discord.Interaction, sub_command: app_comma
             designname = choices.values[0]
             if designname in settings[guildID]['chessGame']['designs']:
                 colors = settings[guildID]['chessGame']['designs'].pop(designname)
-                dumpSettings()
+                dumpSettings(guildID)
                 await interaction.response.send_message(lang.chess.design_delete_ok(designname, colors))
 
         choices.callback = delete_board
@@ -1283,7 +1276,7 @@ async def chess_design(interaction : discord.Interaction, sub_command: app_comma
 ])
 async def playlists(interaction : discord.Interaction, sub_command: app_commands.Choice[str]):
     if not config.music:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /playlist: ')
@@ -1310,53 +1303,45 @@ async def playlists(interaction : discord.Interaction, sub_command: app_commands
     elif response == 1:  #add a new playlist
         class NewPlaylist(discord.ui.Modal, title = lang.music.playlist_create_title):
             name = discord.ui.TextInput(label='Nome', placeholder="", style=discord.TextStyle.short, required=True)
-            links = discord.ui.TextInput(label='Tracks ', placeholder=lang.music.newplaylist_tp, style=discord.TextStyle.paragraph, required=True)
+            user_queries = discord.ui.TextInput(label='Tracks ', placeholder=lang.music.newplaylist_tp, style=discord.TextStyle.paragraph, required=True)
 
-            async def on_submit(self, interaction: discord.Interaction):
+            async def on_submit(self, modal_interaction: discord.Interaction):
+                await modal_interaction.response.defer(ephemeral=True)
                 name = str(self.name)
-                links = str(self.links).split('\n')
+                user_queries = str(self.user_queries).replace(",", "").split('\n')
 
-                mPrint('TEST', f"{name}: {links}")
+                mPrint('TEST', f"{name}: {user_queries}")
 
-                errors = ''
-                tracks = []
-                for x in links:
-                    isUrlValid = musicUrlParser.evalUrl(x, settings[interaction.guild.id]['musicbot']['urlsync'])
+                if (name in settings[guildID]['musicbot']['saved_playlists']):
+                    await modal_interaction.followup.send(lang.music.playlist_already_exists(self.user_queries))
+                    return
 
-                    if isUrlValid == False:
-                        errors += lang.music.playlist_create_404(x)
+                
+                guild_playlists = settings[guildID]['musicbot']['saved_playlists']
+                guild_urlsync = musicBridge.musicUtils.getUrlSync(guildID)
 
-                    else: # Search youtube query
-                        if "spotify.com" not in x and "youtube.com" not in x:
-                            mPrint('MUSIC', f'Searching for user requested song: ({x})')
-                            x = musicUrlParser.youtubeParser.searchYTurl(x)
-                        tracks.append(x)
-
-                if errors != '':
-                    embed = discord.Embed(
-                        title="ERRORS:",
-                        description=errors,
-                        color=col.error
-                    )
-
-                    if tracks == []:
-                        embed.add_field(name='ERROR', value=': every song/playlist failed')
-                        await interaction.response.send_message(embed=embed, ephemeral=True)
-
+                tracks = musicBridge.parseUserInput(",".join(user_queries), guild_playlists, guild_urlsync)
+                if tracks == None:
+                    await modal_interaction.followup.send(lang.music.input_error)
+                    return -1
+                elif tracks == 404:
+                    await modal_interaction.followup.send(lang.music.play_error_404)
+                    return -1
+                
                 trackList = ''
                 for i, t in enumerate(tracks):
                     trackList += f"\n**{i}**. {t}"
 
                 #Save the song/playlist URL in a list of one element and inform the user
                 settings[guildID]["musicbot"]["saved_playlists"][name] = tracks
-                dumpSettings()
+                dumpSettings(guildID)
 
                 embed = discord.Embed(
                     title = f"Playlist {name}: ",
-                    description=f"{trackList}\n{errors}",
-                    color = col.orange if errors == "" else col.red
+                    description=f"```{trackList}```",
+                    color = col.orange
                 )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await modal_interaction.followup.send(embed=embed, ephemeral=True)
                 
                 return
 
@@ -1380,36 +1365,23 @@ async def playlists(interaction : discord.Interaction, sub_command: app_commands
                 plists = '\n'.join(savedPlaylists[playlistName])
                 links = discord.ui.TextInput(label='Tracks', placeholder=lang.music.newplaylist_tp, default=plists, style=discord.TextStyle.paragraph, required=True)
 
-                async def on_submit(self, interaction: discord.Interaction): #this triggers when user submits the modal with the new data
-                    links = str(self.links).split('\n')
+                async def on_submit(self, modal_interaction: discord.Interaction): #this triggers when user submits the modal with the new data
+                    await modal_interaction.response.defer(ephemeral=True)
+                    user_queries = str(self.links).replace(",", "").split('\n')
                     # this is the same as creating a new playlist
 
-                    mPrint('TEST', f"{playlistName}: {links}")
+                    mPrint('TEST', f"{playlistName}: {user_queries}")
 
-                    errors = ''
-                    tracks = []
-                    for x in links:
-                        isUrlValid = musicUrlParser.evalUrl(x, settings[interaction.guild.id]['musicbot']['urlsync'])
+                    guild_playlists = settings[guildID]['musicbot']['saved_playlists']
+                    guild_urlsync = musicBridge.musicUtils.getUrlSync(guildID)
 
-                        if isUrlValid == False:
-                            errors += lang.music.playlist_create_404(x)
-
-                        else:
-                            if "open.spotify.com" not in x and "youtube.com" not in x:
-                                mPrint('MUSIC', f'Searching for user requested song: ({x})')
-                                x = musicUrlParser.youtubeParser.searchYTurl(x)
-                            tracks.append(x)
-
-                    if errors != '':
-                        embed = discord.Embed(
-                            title="ERRORS:",
-                            description=errors,
-                            color=col.error
-                        )
-
-                        if tracks == []:
-                            await interaction.response.send_message(lang.music.playlist_create_failed, ephemeral=True)
-                            return
+                    tracks = musicBridge.parseUserInput(",".join(user_queries), guild_playlists, guild_urlsync)
+                    if tracks == None:
+                        await modal_interaction.followup.send(lang.music.input_error)
+                        return -1
+                    elif tracks == 404:
+                        await modal_interaction.followup.send(lang.music.play_error_404)
+                        return -1
 
                     trackList = ''
                     for i, t in enumerate(tracks):
@@ -1417,14 +1389,14 @@ async def playlists(interaction : discord.Interaction, sub_command: app_commands
 
                     #Save the song/playlist URL in a list of one element and inform the user
                     settings[guildID]["musicbot"]["saved_playlists"][playlistName] = tracks
-                    dumpSettings()
+                    dumpSettings(guildID)
 
                     embed = discord.Embed(
                         title = f"Playlist {playlistName}: ",
-                        description=f"{trackList}\n{errors}",
-                        color = col.orange if errors == "" else col.red
+                        description=f"```{trackList}```",
+                        color = col.orange
                     )
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    await modal_interaction.response.send_message(embed=embed, ephemeral=True)
                     
                     return
 
@@ -1447,13 +1419,14 @@ async def playlists(interaction : discord.Interaction, sub_command: app_commands
         view = discord.ui.View()
         view.add_item(choices)
 
-        async def delete_playlist(interaction : discord.Interaction): # This triggers when user selects the playlist to delete
+        async def delete_playlist(option_interaction : discord.Interaction): # This triggers when user selects the playlist to delete
+            await option_interaction.response.defer(ephemeral=True)
             playlistName = str(choices.values[0])
             if playlistName in settings[guildID]["musicbot"]['saved_playlists']:
                 links = settings[guildID]["musicbot"]['saved_playlists'].pop(playlistName)
-                dumpSettings()
+                dumpSettings(guildID)
                 links = "\n".join(links)
-                await interaction.response.send_message(lang.music.playlist_delete_ok(playlistName, f'```{links}```'), ephemeral=True)
+                await option_interaction.followup.send(lang.music.playlist_delete_ok(playlistName, f'```{links}```'), ephemeral=True)
 
         choices.callback = delete_playlist
         if savedPlaylists != {}:
@@ -1475,7 +1448,7 @@ async def playerSettings(interaction : discord.Interaction, setting : app_comman
     :param setting: DO NOT INSERT value FOR SHUFFLE 
     """
     if not config.music:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
         return
     
     mPrint('CMDS', f'called /player-settings: ')
@@ -1494,20 +1467,20 @@ async def playerSettings(interaction : discord.Interaction, setting : app_comman
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
     elif response == 1: # shuffle setting
-        current = bool(settings[guildID]['musicbot']["player_shuffle"])
+        is_shuffle = bool(settings[guildID]['musicbot']["player_shuffle"])
         choices = discord.ui.Select(options=[
-            discord.SelectOption(label="True", description="Il player fa il primo shuffle in automatico", value=True, default=current),
-            discord.SelectOption(label="False", description="Il player riproduce le canzoni in ordine", value=False, default=(not current))
+            discord.SelectOption(label="True", value=True, default=is_shuffle),
+            discord.SelectOption(label="False", value=False, default=(not is_shuffle))
             ]
         )
         view = discord.ui.View()
         view.add_item(choices)
 
-        async def shuffle_response(interaction : discord.Interaction):
+        async def shuffle_response(response_interaction : discord.Interaction):
+            await response_interaction.response.defer(ephemeral=True)
             mPrint('TEST', f"{choices.values[0]}")
             settings[guildID]['musicbot']["player_shuffle"] = choices.values[0]
-            dumpSettings()
-            await interaction.response.defer()
+            dumpSettings(guildID)
 
         choices.callback = shuffle_response
         await interaction.response.send_message(view=view, ephemeral=True)
@@ -1527,32 +1500,44 @@ async def playerSettings(interaction : discord.Interaction, setting : app_comman
             warnmsg = lang.music.settings_timeline_min
         
         settings[guildID]['musicbot']["timeline_precision"] = newPrec
-        dumpSettings()
+        dumpSettings(guildID)
         await interaction.response.send_message(lang.music.settings_new_precision(f"{newPrec}{warnmsg}"), ephemeral=True)
 
     return
-    
+
 @tree.command(name="play", description=lang.slash.play)
 @app_commands.describe(tracks="URL / Title / saved playlist (/playlist); use , for mutiple items")
-async def playSong(interaction : discord.Interaction, tracks : str, shuffle:bool = None):
+async def playSong(interaction:discord.Interaction, tracks:str, shuffle:bool = None):
+    guildID = int(interaction.guild.id)
+    
     if not config.music:
-        await interaction.response.send_message("This module is not available", ephemeral=True)
+        await interaction.response.send_message(lang.disabled_module, ephemeral=True)
+        return
+    if interaction.channel.id in settings[guildID]['musicbot']['disabled_channels']:
+        await interaction.response.send_message(lang.module_not_enabled, ephemeral=True)
         return
     
-    guildID = int(interaction.guild.id)
     await interaction.response.defer(ephemeral=True)
-
-    if interaction.channel.id in settings[guildID]['musicbot']['disabled_channels']:
-        await interaction.followup.send(lang.module_not_enabled, ephemeral=True)
-        return
+    
+    if not os.path.exists("music/urlsync/"): os.mkdir('music/urlsync/')
     
     # Load useful variables
-    urlsync = settings[guildID]['musicbot']['urlsync']
     if shuffle == None: shuffle = settings[guildID]['musicbot']["player_shuffle"]
     # else -> shuffle = shuffle
     precision = settings[guildID]['musicbot']["timeline_precision"]
     playlists = settings[guildID]['musicbot']['saved_playlists']
+    urlsync = musicBridge.musicUtils.getUrlSync(guildID)
 
+    # Parse user query
+    queueTrackLinks = musicBridge.parseUserInput(tracks, playlists, urlsync)
+    if queueTrackLinks == None:
+        await interaction.followup.send(lang.music.input_error)
+        return -1
+    elif queueTrackLinks == 404:
+        await interaction.followup.send(lang.music.play_error_404)
+        return -1
+
+    # Fetch voice channel and load voice client 
     try:
         userVC = bot.get_channel(interaction.user.voice.channel.id)
     except AttributeError:
@@ -1566,43 +1551,8 @@ async def playSong(interaction : discord.Interaction, tracks : str, shuffle:bool
         else:
             await interaction.followup.send(lang.music.play_already_connected, ephemeral=True)
         return
-
-    # Merge music/suggestions/guildID[overwritten tracks] with guidsData[urlsync]
-    try:
-        if not os.path.exists("music/suggestions"):
-            os.mkdir('music/suggestions')
-        with open(f'music/suggestions/{str(interaction.guild.id)}.json', 'r') as f:
-            new_urlsync = json.load(f)
-        os.remove(f'music/suggestions/{str(interaction.guild.id)}.json')
-
-        tmp_merge = {}
-        for d in urlsync + new_urlsync:
-            tmp_merge.setdefault(d['youtube_url'], {}).update(d)
-        urlsync = [tmp_merge[d] for d in tmp_merge]
-
-        settings[guildID]['musicbot']['urlsync'] = urlsync
-        dumpSettings()
-
-        mPrint('DEBUG', "synced urlsync suggestions with urlsync")
-
-    except json.decoder.JSONDecodeError:
-        #File is probably empty, still delete it in case it's corrupted
-        os.remove(f'music/suggestions/{str(interaction.guild.id)}.json')
-    except FileNotFoundError:
-        pass #File does not exist
-    except Exception:
-        mPrint('WARN', traceback.format_exc())
-
-    # Get the links
-    playlistURLs = musicBridge.parseUserInput(tracks, playlists)
-    if playlistURLs == None:
-        await interaction.followup.send(lang.music.input_error)
-        return -1
-    elif playlistURLs == 404:
-        await interaction.followup.send(lang.music.play_error_404)
-        return -1
     
-    # Remove musicbot slash commands if they exist (will regenerate them later)
+    # Remove guild musicbot slash commands if they exist (will regenerate them later)
     cmds = tree.get_commands(guild=interaction.guild)
     if len(cmds) != 0:
         tree.clear_commands(guild=interaction.guild)
@@ -1611,8 +1561,8 @@ async def playSong(interaction : discord.Interaction, tracks : str, shuffle:bool
 
     #Start music module
     try:
-        mPrint('TEST', f'playing input: {playlistURLs}')
-        await musicBridge.play(playlistURLs, interaction, bot, tree, shuffle, precision, urlsync, playlists)
+        mPrint('TEST', f'playing input: {queueTrackLinks}')
+        await musicBridge.play(queueTrackLinks, interaction, bot, tree, shuffle, precision, urlsync, playlists)
         mPrint('TEST', 'musicBridge.play() returned')
     except Exception:
         await interaction.followup.send(lang.music.player.generic_error, ephemeral=True)
@@ -1751,11 +1701,11 @@ async def module_settings(interaction : discord.Interaction, modules:app_command
                 for c in allChannels:
                     if c.type == discord.ChannelType.text:
                         settings[guildID][module]['disabled_channels'].append(c.id)
-                dumpSettings()
+                dumpSettings(guildID)
                 await interaction.followup.send(lang.commands.module_disabled_all_channels(modules.name), ephemeral=True)
             else: #user wants to enable setting in every channel
                 settings[guildID][module]['disabled_channels'] = []
-                dumpSettings()
+                dumpSettings(guildID)
                 await interaction.followup.send(lang.commands.module_enabled_all_channels(modules.name), ephemeral=True)
         else: #change setting for specific channel
             if channel.id in settings[guildID][module]['disabled_channels']: #channel was already disabled
@@ -1764,12 +1714,12 @@ async def module_settings(interaction : discord.Interaction, modules:app_command
                     pass #channel was already enabled
                 else:
                     settings[guildID][module]['disabled_channels'].remove(channel.id)
-                    dumpSettings()
+                    dumpSettings(guildID)
                     await interaction.followup.send(lang.commands.module_now_enabled(modules.name, channel.mention), ephemeral=True)
             else: #channel was enabled
                 if enable == False:
                     settings[guildID][module]['disabled_channels'].append(channel.id)
-                    dumpSettings()
+                    dumpSettings(guildID)
                     await interaction.followup.send(lang.commands.module_now_disabled(modules.name, channel.mention), ephemeral=True)
                 else:
                     await interaction.followup.send(lang.commands.module_already_enabled(modules.name, channel.mention), ephemeral=True)
@@ -1803,7 +1753,7 @@ async def module_settings(interaction : discord.Interaction, modules:app_command
                             settings[guildID][module]['disabled_channels'].append(channel.id)
                         else:
                             pass #channel was already disabled
-            dumpSettings()
+            dumpSettings(guildID)
             await interaction.followup.send(lang.commands.module_done)
         except Exception:
             mPrint('ERROR', f'0x1000\n{traceback.format_exc()}')
@@ -1850,7 +1800,6 @@ async def feedback(interaction : discord.Interaction, category:app_commands.Choi
 
 #           -----           BOT RUN SCRIPT           -----       #
 
-loadSettings()
 try:
     bot.run(TOKEN)
 except:

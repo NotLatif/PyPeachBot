@@ -1,6 +1,7 @@
-# import json #used for testing
+import traceback
 import yt_dlp
-from musicObjects import Track, ydl_opts, youtubeDomain, download
+from urllib.parse import urlparse
+from musicObjects import Track, ydl_opts, youtubeDomain, download, ytPlistDTO
 
 from mPrint import mPrint as mp
 def mPrint(tag, text):
@@ -13,7 +14,11 @@ def searchYTurl(query) -> str:
     gets the url of the first song in queue (the one to play)
     """
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        result = ydl.extract_info(f"ytsearch:{query}", download=False)['entries'][0]
+        results = ydl.extract_info(f"ytsearch:{query}", download=False)['entries']
+        if(len(results) == 0):
+            mPrint('ERROR', "ytsearch result was empty (no track found from query)")
+            return 404 
+        result = results[0]
         try:
             int(result['duration'])
         except TypeError: #If duration is null video is probably was live, just skip it
@@ -32,91 +37,106 @@ def stampToSec(str : str) -> int:
         seconds += int(str[2]) * 60
     return seconds
 
-def fetchTracks(url: str) -> list[Track]:
+# youtube FETCHER
+def fetchTracks(target: str) -> list[Track]|None:
     # mPrint('FUNC', f"youtubeParser.fetchTracks({url=})")
-    if "music.youtube.com" in url: #target is youtube music URL
+    if "music.youtube.com" in target: #target is youtube music URL
         #replacing the strings gets the same link in youtube video form
-        url = url.replace("music.youtube.com", "www.youtube.com", 1)
+        target = target.replace("music.youtube.com", "www.youtube.com", 1)
 
-    elif "www.youtube.com" not in url and "youtu.be" not in url: #Avoid other links
+    elif "www.youtube.com" not in target and "youtu.be" not in target: #
         for x in ['http://', 'https://', 'www.']:
-            if x in url: 
+            if x in target: 
                 mPrint('DEBUG', 'Link is not a valid URL')
                 return None
             
-        mPrint("DEBUG", "Link is not a youtube link, using query")
+        mPrint("DEBUG", "target is not a youtube link, searching query")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                r_result = ydl.extract_info(f"ytsearch:{url}", download=False)
-                result = r_result['entries'][0]
-                url = f'{youtubeDomain}{result["url"]}'
-                mPrint('DEBUG', f'Found url:{url}')
+                r_result = ydl.extract_info(f"ytsearch:{target}", download=False)
+                response = r_result['entries'][0]
+                target = f'{youtubeDomain}{response["url"]}'
+                mPrint('DEBUG', f'Found url:{target}')
             except TypeError:
-                mPrint('WARN', 'Query result is null (?)')
+                mPrint('WARN', f'Query result is null (?)')
+                mPrint('DEBUG', traceback.format_exc())
                 return None            
 
     # Parse url to get IDs for video and playlist, as well as the current index
-    linkData = url.split('&')
-    video = linkData[0]
-    playlist = None
-    index = 1
-    for u in linkData:
-        if 'list' in u:
-            playlist = u.strip('list=')
-        elif 'index' in u:
-            index = int(u.strip('index='))
+    yt_url = urlparse(target)
+    url_queries = {x.split('=')[0]:x.split('=')[1] for x in yt_url.query.split('&')}
+    
+    # parse and check yt url queries
+    v, plist, index = None, None, 1
+    if ('v' in url_queries): v = url_queries['v']                   # video ID
+    if ('list' in url_queries): plist = url_queries['list']         # plist ID
+    if ('index' in url_queries): index = int(url_queries['index'])  # plist start index
+    if (v == None and plist == None):                               # no video ID and no plist ID (not enough info)
+        mPrint('DEBUG', 'url did not contain a video ID nor a playlist ID: skipping target.')
+        return None
+
+    response : ytPlistDTO = {} 
 
     #Extract data from the url NB: videos and playlists have a different structure
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            result = ydl.extract_info(url, download)
+            response = ydl.extract_info(target, False)
+
         except yt_dlp.utils.DownloadError:
-            mPrint('ERROR', 'yt_dlp.utils.DownloadError: (Probably) Age restricted video')
-            return None
+            mPrint('ERROR', f'yt_dlp.utils.DownloadError: (Probably) Age restricted video\n{traceback.format_exc()}')
+    
+    if len(response) == 0: return None
 
-    # Parse uploader data (assuming it's the song artist)
-    artist = [{"name": result["uploader"], "url": result["uploader_url"]}]
-
-    # Playlist link only returns one song
+    # Organize Track info and return
     tracks : list[Track] = []
     
-    if playlist != None: #link is a playlist
+    # target is a playlist
+    if plist != None:
         def addTracks(i) -> None:
-            videoData = result['entries'][i]
+            videoData = response['entries'][i]
 
-            #Append Track foreach video in playlist
             try:
                 duration = int(videoData['duration'])
-            except TypeError: #If duration is null video is probably was live, just skip it
-                mPrint('DEBUG', f'Skipping live video {youtubeDomain}{videoData["url"]}')
+            except TypeError: # triggers for live and hidden videos
+                mPrint('DEBUG', f'Skipping unavailable video {youtubeDomain}{videoData["url"]}')
                 return -1
 
             tracks.append(Track(
                 SOURCE,
                 f"{youtubeDomain}{videoData['url']}",
                 videoData["title"],
-                artist,
+                [{"name": videoData["uploader"], "url": videoData["uploader_url"]}],
                 duration,
                 f"{youtubeDomain}{videoData['url']}",
                 None
             ))
 
-        # add songs in the same order as the one in the youtube playlist
-        # starting @ the video that the user took the link from
-        for i in range(index-1, len(result['entries'])):
+        # add songs starting from the selected one
+        start_index = 0 # find index of first song (index query not reliable)
+        if (v != None):
+            for j, video_data in enumerate(response['entries']):
+                if v == video_data['id']:
+                    start_index = j
+                    break
+                # if not found add from the first one
+                    
+        # add tracks from (start_index to end) then (from 0 to start_index)
+        for i in range(start_index, len(response['entries'])):
             addTracks(i)
-        for i in range(index-1):
+        for i in range(start_index):
             addTracks(i)
 
-    else: #link is a video
+    # target is one video
+    else: 
         tracks.append(Track(
             SOURCE,
-            result['webpage_url'],
-            result['title'],
-            artist,
-            int(result['duration']),
-            result['webpage_url'],
-            result['thumbnail']
+            response['webpage_url'],
+            response['title'],
+            [{"name": response["uploader"], "url": response["uploader_url"]}],
+            int(response['duration']),
+            response['webpage_url'],
+            response['thumbnail'],
+            #response['age_limit']
         ))
 
     

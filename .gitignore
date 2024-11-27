@@ -1,17 +1,20 @@
 .*
-notes/
-music/suggestions/
-tests/
-chessGame/games/
-guildsData.json
-workspace/
 temp/
-botFiles/join_images/
-botFiles/join_data/
-Marsupio/
-python-venv/
-NotLatif.py
+notes/
+tests/
 review/
+workspace/
+python-venv/
+chessGame/games/
+music/suggestions/
+music/urlsync/
+botFiles/join_data/
+botFiles/join_images/
+botFiles/guilds_data/
+Marsupio/
+NotLatif.py
+guildsData.json
+logs/
 
 # https://github.com/github/gitignore/blob/main/Python.gitignore
 # Byte-compiled / optimized / DLL files

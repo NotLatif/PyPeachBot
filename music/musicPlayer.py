@@ -56,17 +56,15 @@ def textToSeconds(text):
     return seconds
 
 class Player():
-    def __init__(self, vc : discord.VoiceClient, queue : Queue, urlsync: list[dict]) -> None:
+    def __init__(self, vc : discord.VoiceClient, queue : Queue) -> None:
         mPrint('DEBUG', 'called Player __init__')
         self.queue : Queue = queue
         self.currentTrack : Track = None
 
         self.voiceClient = vc
         self.isConnected = True
-        self.timeout = config.no_music_timeout
-        self.isWaiting = False
-
-        self.urlsync = urlsync
+        self.timeout = config.no_music_timeout  # time for bot to stay in vc after queue ends
+        self.isWaiting = False                  # whether the bot is waiting after queue ends
 
         #flags needed to communicate with EmbedHandler
         self.wasReported = False
@@ -160,14 +158,13 @@ class Player():
                 self.currentTrack = self.queue.getNext()
 
         if self.isConnected == False:
-            mPrint('INFO', "#--------------- DONE ---------------#")
+            mPrint('INFO', "Disconnected from voice.")
 
-        mPrint('INFO', "---------------- PLAYNEXT ----------------")
+        mPrint('INFO', "Playing next track")
         if self.isPaused: self.resume()
 
         try:
-            # mPrint('TEST', f"{self.urlsync=}")
-            song_url = self.currentTrack.getVideoUrl(urlsync=self.urlsync)
+            song_url = self.currentTrack.getVideoUrl()
             mPrint('DEBUG', f'URL: {song_url}')
             if song_url == None:
                 # careful with recursion
@@ -328,8 +325,8 @@ class MessageHandler():
         await self.embedLoop()
         # when done stop the player
         await self.player.voiceClient.disconnect()
-        self.player.isConnected=False
-        mPrint('IMPORTANT', '[MessageHandler] Queue done, returning.')
+        self.player.isConnected = False
+        mPrint('DEBUG', '[MessageHandler] Queue done, returning.')
         return
 
     async def embedLoop(self):
@@ -347,7 +344,7 @@ class MessageHandler():
             #this will execute after a song ends
             self.timeDone = time.time()
             if not self.player.isConnected:
-                mPrint("DEBUG", f"[MessageHandler] detected EOPlaylist, stopping embedloop (1) {self.player.isConnected=}")
+                mPrint("DEBUG", f"[MessageHandler] detected bot disconnected from VC, stopping embedloop (1) {self.player.isConnected=}")
                 await self.updateEmbed(stop = True)
                 return
 
@@ -377,11 +374,15 @@ class MessageHandler():
             await self.updateEmbed()
             self.timeStart = time.time()
             while True:
-                await asyncio.sleep(0.5)
-                if not self.player.voiceClient.is_connected(): self.disconnectedCheck -= 1 #checked every .5 seconds
-                else: self.disconnectedCheck = 3
+                await asyncio.sleep(0.5) #checked every .5 seconds
+                
+                # detect if bot looses connection for more than the disconnectedCheck threshold
+                if not self.player.voiceClient.is_connected(): self.disconnectedCheck -= 1
+                else: self.disconnectedCheck = 6
 
-                if self.disconnectedCheck <= 0: self.player.isConnected = False
+                if self.disconnectedCheck <= 0: 
+                    self.player.isConnected = False
+                    mPrint('DEBUG', f"Bot was disconnected for too long {self.disconnectedCheck=} {self.player.isConnected=} {self.player.voiceClient.is_connected()=}")
 
                 # Detect if alone in voice channel
                 if len(self.vchannel.members) == 1:
@@ -442,10 +443,10 @@ class MessageHandler():
                     await asyncio.sleep(0.5) #wait for player to get ready
                     break #repeat loop for next song
 
-                if not self.player.isConnected:
-                    mPrint("DEBUG", "[MessageHandler] detected EOPlaylist, stopping embedloop (2)")
-                    await self.updateEmbed(stop = True)
-                    return
+                # if not self.player.isConnected:
+                #     mPrint("DEBUG", "[MessageHandler] detected EOPlaylist, stopping embedloop (2)")
+                #     await self.updateEmbed(stop = True)
+                #     return
 
                 if not self.player.isConnected:
                     await asyncio.sleep(0.5)
@@ -453,7 +454,7 @@ class MessageHandler():
                         mPrint("WARN", "[MessageHandler][2] Bot was disconnected from vc, stopping embedloop")
                         return
                     else:
-                        mPrint("WARN", "[MessageHandler] Bot was probably moved to another voice channel")
+                        mPrint("DEBUG", "[MessageHandler] Bot reconnected")
 
     def getEmbed(self, stop = False, move = False, pnext = False, leftAlone = False) -> discord.Embed:
         # mPrint('FUNC', "getEmbed()")

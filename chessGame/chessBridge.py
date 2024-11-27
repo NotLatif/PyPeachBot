@@ -29,7 +29,7 @@ def num2emoji(num : int):
 		else: words.append('?')
 	return f':{"::".join(words)}:'
 
-def getOverallWinnerName(players, score) -> str:
+def getGameWinnerName(players, score) -> str:
 	if score[0] == score[1]:
 		return "Pareggio"
 	return str(players[0]) if score[0]>score[1] else str(players[1])
@@ -149,7 +149,7 @@ async def loadGame(threadChannel : discord.Thread, bot, players : list[discord.M
 					#edit and send the main channel embed
 					embed = fetchThread[1]
 					embed.title = f'{reason}\n{emojis[0]} {players[0]} {num2emoji(score[0])} :vs: {num2emoji(score[1])} {players[1]} {emojis[1]}'
-					embed.description = f'Match winner: {str(winner)[:-5]} {emojis[lastTurn]}\nOverall winner: {f"{getOverallWinnerName(players, score)}"}'
+					embed.description = f'Match winner: {str(winner)[:-5]} {emojis[lastTurn]}\nOverall winner: {f"{getGameWinnerName(players, score)}"}'
 					embed.set_footer(text=f'ID: {threadChannel.id}, now voting for rematch...')
 					embed.color = col.white if lastTurn == 1 else col.black 
 					await fetchThread[0].edit(embed=embed)
@@ -312,7 +312,7 @@ async def loadGame(threadChannel : discord.Thread, bot, players : list[discord.M
 					#edit and send the main channel embed
 					embed = fetchThread[1]
 					embed.title = f'-- GAME OVER --\n{emojis[0]} {players[0]} {num2emoji(score[0])} :vs: {num2emoji(score[1])} {players[1]} {emojis[1]}'
-					embed.description = f'❌ Partita annullata ❌\nOverall winner: {getOverallWinnerName(players, score)}'
+					embed.description = f'❌ Partita annullata ❌\nOverall winner: {getGameWinnerName(players, score)}'
 					embed.color = col.red
 					embed.set_footer(text=f'ID: {threadChannel.id}')
 					await fetchThread[0].edit(embed=embed)

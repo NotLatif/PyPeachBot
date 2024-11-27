@@ -12,19 +12,21 @@ def mPrint(tag, text):
 youtubeDomain = '' #LEAVE BLANK (switch from youtube_dl to yt_dlp)
 download = False
 if not os.path.isfile("music/.yt_cookies.txt"):
-    mPrint('WARN', 'file `music/.yt_cookies.txt` is missing, age restricted video will not get played')
+    mPrint('WARN', 'file `music/.yt_cookies.txt` is missing, explicit songs may get skipped.')
     mPrint('WARN', 'For info look into README.md')
     ydl_opts = {
+        'quiet': True,
+        'ignoreerrors': True,
         'writedescription': False,
         'extract_flat': 'in_playlist',
-        "quiet": True,
     }
 else:
     ydl_opts = {
+        'quiet': True,
+        'ignoreerrors': True,
         'writedescription': False,
         'extract_flat': 'in_playlist',
-        "quiet": True,
-        'cookiefile': 'music/.yt_cookies.txt'
+        'cookiefile': 'music/.yt_cookies.txt',
     }
 
 class Track:
@@ -67,22 +69,14 @@ class Track:
     
         return artists[:-2] #remove last ", " before returning
 
-    def getVideoUrl(self, search = True, urlsync = None) -> Union[str, None]:
-        # mPrint('TEST', f"getVideoUrl \n{self.spotifyURL=}\n{urlsync=}")
-        if urlsync and self.spotifyURL:
-            for d in urlsync:
-                if ('spotify_url' in urlsync) and (d['spotify_url'] == self.spotifyURL):
-                    self.youtubeURL = d['youtube_url']
-                    return self.youtubeURL
-
-        elif self.youtubeURL != None:
-            return self.youtubeURL
+    def getVideoUrl(self, search = True) -> Union[str, None]:
+        if self.youtubeURL != None: return self.youtubeURL
 
         if search == False: return None
 
         # we don't know the url but we can search it
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            mPrint('DEBUG', f'Searching URL for {self.getQuery()}')
+            mPrint('DEBUG', f'Searching URL -> {self.getQuery()}')
             try:
                 r_result = ydl.extract_info(f"ytsearch:{self.getQuery()}", download=False)
                 result = r_result['entries'][0]
@@ -112,7 +106,7 @@ class Track:
             if self.artists == None: self.artists = result['uploader']
             # mPrint('TEST', f'getURL() -> found |{youtubeDomain}{result["url"]}|')
             return f'{youtubeDomain}{result["url"]}'
-    
+
     def getVideoThumbnailUrl(self) -> Union[str, None]:
         # mPrint('FUNC', "Track.getVideoThumbnailUrl()")
         if self.thumbnailURL != None: 
@@ -142,7 +136,7 @@ class Track:
         return f"{self.title} {self.artists[0]['name']}{' (Explicit)' if self.explicit else ''}"
     
     def toDict(self, search = False) -> dict:
-        mPrint('FUNC', "Track.toDict()")
+        # mPrint('FUNC', "Track.toDict()")
         if self.artists == ['']: artists = None
         else: artists = self.artists
 
@@ -356,4 +350,49 @@ class Queue:
         for i, track in enumerate(self.getQueue()):
             string += f'{i}: {str(track)}\n'
         return string
-    
+
+
+class ytThumbDTO:
+    url: str
+    height: int
+    width: int
+    id: str | None
+    resolution: str | None
+
+class ytTrackDTO:
+    _type: str
+    ie_key: str
+    id: str
+    url: str
+    title: str
+    # description: str
+    duration: int
+    channel_id: str
+    channel: str
+    channel_url: str
+    uploader: str
+    uploader_id: str | None
+    uploader_url: str | None
+    thumbnails: list[ytThumbDTO]
+    # ...
+    view_count: int
+
+class ytPlistDTO:
+    id: str
+    title: str
+    availability: str
+    # description: str
+    thumbnails: list[ytThumbDTO]
+    playlist_count: int
+    channel: str
+    channel_id: str
+    channel_url: str
+    uploader: str
+    uploader_id: str
+    uploader_url: str
+    entries: list[ytTrackDTO]
+    webpage_url: str
+    original_url: str
+    #keys: ['id', 'title', 'availability', 'channel_follower_count', 'description', 'tags', 'thumbnails', 'modified_date', 'view_count', 
+        # 'playlist_count', 'channel', 'channel_id', 'uploader_id', 'uploader', 'channel_url', 'uploader_url', '_type', 'entries', 
+        # 'extractor_key', 'extractor', 'webpage_url', 'original_url', 'webpage_url_basename', 'webpage_url_domain', 'epoch']

@@ -24,8 +24,23 @@ SETTINGS_TEMPLATE = {
             "player_shuffle": True,
             "disabled_channels": [],
             "saved_playlists": {},
-            "urlsync": [], # [{youtube_url: str, query: str, spotify_url: str, soundcloud_url?: str}] # youtube_url can be treated as an ID
             "timeline_precision": 14
         }
     }
 }
+
+# folders
+spotify_netloc = 'open.spotify.com'
+
+settings_folder = "botFiles/guilds_data/"
+urlsync_folder = 'music/urlsync/'
+
+
+FATAL = 100
+ERROR = 70
+WARN = 60
+INFO = 30
+DEBUG = 10
+TEST = 9
+FUNC = 5
+ALL = 0

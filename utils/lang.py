@@ -6,6 +6,7 @@ class it:
     module_not_enabled = "Questo modulo non è abilitato in questo canale"
     confirm = "Conferma"
     cancel = "Annulla"
+    disabled_module = "Questa funzione non è al momento disponibile."
 
 
     class slash: #slash command descriptions
@@ -147,6 +148,7 @@ class it:
         playlist_create_title = "Crea una nuova playlist"
         playlist_create_404 = lambda playlistName: f"Error: Could not find song/playlist {playlistName}\n"
         playlist_create_failed = "Error: every song/playlist failed"
+        playlist_already_exists = lambda playlistData: f"Una playlist con lo stesso nome esiste già, modificala o scegli un nuovo nome\n```your input:\n{playlistData}```"
 
         settings_embed_title = "Impostazioni del musicbot"
         settings_arg_needed = "Per questa impostazione devi specificare un valore nel comando"
@@ -159,6 +161,9 @@ class it:
         play_already_connected = "Sono già connesso in un altro canale vocale"
         play_error_404 = "C'è stato un errore nella ricerca della traccia"
 
+        player_user_not_vc = "Devi essere in un canale vocale per usare questo comando"
+        player_bot_other_vc = "Sono già in un altro canale vocale."
+
         class player:
             generic_error = "C'è stato un errore"
 
@@ -168,6 +173,7 @@ class en:
     module_not_enabled = "That module isn't enabled in this channel."
     confirm = "Confirm"
     cancel = "Cancel"
+    disabled_module = "Sorry, this feature has been disabled or is unavailable right now."
 
     class slash: #slash command descriptions
         join_msg = "Change the welcome message"
@@ -308,6 +314,7 @@ class en:
         playlist_create_title = "Create a new playlist"
         playlist_create_404 = lambda playlistName: f"Error: Could not find song/playlist {playlistName}\n"
         playlist_create_failed = "Error: every song/playlist failed"
+        playlist_already_exists = lambda playlistData: f"A playlist with the same name already exists, either edit that or choose a new name\n```your input:\n{playlistData}```"
 
         settings_embed_title = "Musicbot settings"
         settings_arg_needed = "You must specify a value for this setting"
@@ -319,6 +326,9 @@ class en:
         play_wrong_command = "Use /add_song to add to the queue"
         play_already_connected = "I'm already connected in another voice channel"
         play_error_404 = "There was an error with this track"
+
+        player_user_not_vc = "You must connect to a voice channel to use this command"
+        player_bot_other_vc = "I'm already in another voice channel."
 
         class player:
             generic_error = "There was an error."

@@ -1,6 +1,10 @@
-# v1.0.5-beta2
+# v1.0.5-beta4
 
-# 19/MAY/2023
-- Added global switch to disable each module
-- Added bot_name in config.py
-- fixed music-breaking logic bug in musicObjects.py
+NOT YET FULLY TESTED
+
+optimization improvements on code that handle:
+- guild settings 
+- urlsync
+- music text parsing etc...
+
+Created new logger (not ready yet)
